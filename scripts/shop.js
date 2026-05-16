@@ -1,7 +1,7 @@
 /* ============================================================
    HEXON BETA — Shop
    ============================================================
-   The shop has two tabs:
+   The shop has three tabs:
 
      1. "Скини" — gallery of piece palettes (skins.js). Each card
         shows a 6-colour preview and either:
@@ -14,6 +14,10 @@
         in-game confirmation modal; confirming redirects to the admin's
         Telegram (@PloxoyHard) with a pre-filled order message so the
         player can pay externally. No in-app payments are made.
+
+     3. "Активувати код" — paste a code received from the admin and
+        instantly credit HEX to the wallet. Shows a running counter of
+        codes the player has redeemed on this device.
 
    The shop UI is rebuilt from scratch every time the screen is entered
    so it always reflects the latest wallet/skins state.
@@ -39,7 +43,7 @@ const COIN_BUNDLES = [
    per user instructions — change in one place if it ever moves. */
 const SHOP_TELEGRAM_HANDLE = "PloxoyHard";
 
-let shopTab = "skins";        // "skins" | "coins"
+let shopTab = "skins";        // "skins" | "coins" | "redeem"
 let pendingBundleId = null;   // bundle awaiting confirmation in #modal-shop-confirm
 
 function openShopScreen(){
@@ -50,137 +54,40 @@ function openShopScreen(){
 
 function renderShop(){
   paintShopTabs();
-  if(shopTab === "skins") paintSkinGrid();
-  else                    paintCoinGrid();
-  paintAdminPanel();
+  if(shopTab === "skins")       paintSkinGrid();
+  else if(shopTab === "coins")  paintCoinGrid();
+  else if(shopTab === "redeem") paintRedeemPane();
   renderWallet();
 }
 
-/* ---------------- Admin panel ----------------
-   The "admin" mode is triggered by logging in with the literal
-   nickname "admin" (case-insensitive). When active, an admin card
-   appears at the bottom of the shop with three useful actions:
-     - grant 100 000 HEX to the current device,
-     - unlock every skin in the catalogue,
-     - copy this device's HEXON ID to the clipboard.
-   The badge is hidden for non-admin players so they never see it. */
+/* ---------------- Admin detection ----------------
+   The "admin" role is granted to players whose nickname matches the
+   constant ADMIN_NICKNAME (case-insensitive). The login flow in
+   ui.js additionally enforces a fixed admin password before the
+   profile is created, so an arbitrary user can't pick this nick. */
 function isAdminUser(){
   const n = (state && state.profile && state.profile.nickname || "").trim().toLowerCase();
-  return n === "admin";
+  return n === ADMIN_NICKNAME;
 }
-function paintAdminPanel(){
-  const wrap = document.getElementById("shop-admin");
-  if(!wrap) return;
-  if(!isAdminUser()){
-    // Non-admin players still get the activation-code redeem card.
-    wrap.classList.remove("hidden");
-    wrap.innerHTML = renderActivationRedeemCard();
-    wireActivationRedeemCard();
-    return;
-  }
-  wrap.classList.remove("hidden");
-  wrap.innerHTML =
-    '<div class="admin-card">' +
-      '<div class="admin-card-head">'+
-        '<svg viewBox="0 0 20 20" width="18" height="18"><use href="#i-shop"/></svg>'+
-        '<b>ADMIN</b>'+
-        '<span class="admin-id" id="admin-id-chip">'+(state.profile.id||'')+'</span>'+
-      '</div>'+
-      '<div class="admin-actions">'+
-        '<button class="btn-primary" id="admin-grant-100k">+100 000 HEX</button>'+
-        '<button class="btn-primary" id="admin-unlock-all">Unlock all skins</button>'+
-        '<button class="btn-ghost"   id="admin-copy-id">Copy ID</button>'+
-      '</div>'+
-      /* Activation-code generator. The admin pastes the target player's
-         HEXON ID, picks an amount, hits "Generate" and copies the
-         resulting code to send back to that player. The code is bound
-         to the target ID and can only be redeemed once. */
-      '<div class="admin-gen">'+
-        '<div class="admin-gen-head"><b>Activation code generator</b></div>'+
-        '<div class="admin-gen-row">'+
-          '<input type="text" id="admin-gen-id"     placeholder="HX-XXXXX-XXXXX" autocomplete="off" spellcheck="false">'+
-          '<input type="number" id="admin-gen-amt"  placeholder="HEX amount" min="1" max="10000000" value="10000">'+
-        '</div>'+
-        '<div class="admin-gen-row">'+
-          '<button class="btn-primary" id="admin-gen-btn">Generate code</button>'+
-          '<button class="btn-ghost"   id="admin-gen-copy" disabled>Copy</button>'+
-        '</div>'+
-        '<div class="admin-gen-out mono" id="admin-gen-out">—</div>'+
-      '</div>'+
-    '</div>'+
-    /* The admin also gets the redeem card so they can self-test codes. */
-    renderActivationRedeemCard();
 
-  const g = document.getElementById("admin-grant-100k");
-  if(g) g.addEventListener("click", () => {
-    addCoins(100000);
-    toast("ADMIN: +100 000 HEX", "success");
-  });
-  const u = document.getElementById("admin-unlock-all");
-  if(u) u.addEventListener("click", () => {
-    SHOP_SKIN_ORDER.forEach(id => unlockSkin(id));
-    saveState();
-    renderShop();
-    toast("ADMIN: всі скини відкрито", "success");
-  });
-  const c = document.getElementById("admin-copy-id");
-  if(c) c.addEventListener("click", async () => {
-    try { await navigator.clipboard.writeText(state.profile.id || ""); toast("ID скопійовано", "success"); }
-    catch { toast(state.profile.id || "", "info"); }
-  });
-
-  const genBtn  = document.getElementById("admin-gen-btn");
-  const genOut  = document.getElementById("admin-gen-out");
-  const genCopy = document.getElementById("admin-gen-copy");
-  if(genBtn) genBtn.addEventListener("click", async () => {
-    const id  = document.getElementById("admin-gen-id").value.trim();
-    const amt = parseInt(document.getElementById("admin-gen-amt").value, 10) || 0;
-    if(!id || amt <= 0){
-      genOut.textContent = "—";
-      genCopy.disabled = true;
-      toast("ID + amount required", "error");
-      return;
-    }
-    try {
-      const code = await makeActivationCode(id, amt);
-      genOut.textContent = code;
-      genCopy.disabled = false;
-      genCopy.dataset.code = code;
-      toast("Code generated", "success");
-    } catch (e) {
-      genOut.textContent = "—";
-      toast("Failed: " + e.message, "error");
-    }
-  });
-  if(genCopy) genCopy.addEventListener("click", async () => {
-    const code = genCopy.dataset.code || genOut.textContent || "";
-    if(!code || code === "—") return;
-    try { await navigator.clipboard.writeText(code); toast("Copied", "success"); }
-    catch { toast(code, "info"); }
-  });
-
+/* ---------- Activation-code redeem pane (in shop) ---------- */
+function paintRedeemPane(){
+  const countEl = document.getElementById("redeem-count");
+  const totalEl = document.getElementById("redeem-total");
+  if(countEl) countEl.textContent = formatCoins(redeemedCodesCount());
+  if(totalEl) totalEl.textContent = formatCoins(redeemedCodesTotal()) + " HEX";
   wireActivationRedeemCard();
 }
 
-/* ---------- Activation-code redeem card (shown to every player) ---------- */
-function renderActivationRedeemCard(){
-  return ''+
-    '<div class="redeem-card">'+
-      '<div class="redeem-head">'+
-        '<svg viewBox="0 0 20 20" width="18" height="18"><use href="#i-shop"/></svg>'+
-        '<b data-i18n="redeem.title">Активувати код</b>'+
-      '</div>'+
-      '<p class="redeem-desc" data-i18n="redeem.desc">Вставте код, отриманий від адміна, щоб зарахувати HEX.</p>'+
-      '<div class="redeem-row">'+
-        '<input type="text" id="redeem-code-input" placeholder="HX1-XXXXXXXXXXXX-AMOUNT-NONCE-SIG" autocomplete="off" spellcheck="false">'+
-        '<button class="btn-primary" id="redeem-code-btn" data-i18n="redeem.apply">Активувати</button>'+
-      '</div>'+
-    '</div>';
-}
+/* The DOM for the redeem card lives in index.html so it can be styled
+   from the static stylesheet. Here we only wire the button — and we
+   guard against double-binding so re-renders don't pile up listeners. */
 function wireActivationRedeemCard(){
   const btn = document.getElementById("redeem-code-btn");
   const inp = document.getElementById("redeem-code-input");
   if(!btn || !inp) return;
+  if(btn.dataset.wired === "1") return;
+  btn.dataset.wired = "1";
   btn.addEventListener("click", async () => {
     const code = (inp.value || "").trim();
     if(!code) return;
@@ -198,21 +105,46 @@ function wireActivationRedeemCard(){
       return;
     }
     addCoins(r.amount);
+    /* Persistent counter for the player. The verify call already pushed
+       the nonce onto state.usedActivationCodes; the totals below mirror
+       that list for fast read access on the shop & admin screens. */
+    if(!state.activations) state.activations = { redeemed:0, totalReceived:0, generated:0 };
+    state.activations.redeemed      = (state.activations.redeemed | 0) + 1;
+    state.activations.totalReceived = (state.activations.totalReceived | 0) + r.amount;
     saveState();
     toast((t("redeem.ok") || "+{n} HEX зараховано").replace("{n}", r.amount), "success");
     inp.value = "";
     try { sfx.coinUp && sfx.coinUp(); } catch {}
+    paintRedeemPane();
   });
+}
+
+/* Helpers for the activation counters used by both the shop and the
+   admin screen. We prefer the explicit counter when available and fall
+   back to the length of usedActivationCodes for older saves. */
+function redeemedCodesCount(){
+  if(state.activations && Number.isFinite(state.activations.redeemed)) return state.activations.redeemed | 0;
+  return (state.usedActivationCodes || []).length | 0;
+}
+function redeemedCodesTotal(){
+  if(state.activations && Number.isFinite(state.activations.totalReceived)) return state.activations.totalReceived | 0;
+  return 0;
+}
+function generatedCodesCount(){
+  if(state.activations && Number.isFinite(state.activations.generated)) return state.activations.generated | 0;
+  return 0;
 }
 
 function paintShopTabs(){
   document.querySelectorAll(".shop-tab").forEach(t => {
     t.classList.toggle("on", t.dataset.tab === shopTab);
   });
-  const skinsPane = document.getElementById("shop-pane-skins");
-  const coinsPane = document.getElementById("shop-pane-coins");
-  if(skinsPane) skinsPane.classList.toggle("hidden", shopTab !== "skins");
-  if(coinsPane) coinsPane.classList.toggle("hidden", shopTab !== "coins");
+  const skinsPane  = document.getElementById("shop-pane-skins");
+  const coinsPane  = document.getElementById("shop-pane-coins");
+  const redeemPane = document.getElementById("shop-pane-redeem");
+  if(skinsPane)  skinsPane.classList.toggle("hidden",  shopTab !== "skins");
+  if(coinsPane)  coinsPane.classList.toggle("hidden",  shopTab !== "coins");
+  if(redeemPane) redeemPane.classList.toggle("hidden", shopTab !== "redeem");
 }
 
 /* ---------------- Skins tab ---------------- */

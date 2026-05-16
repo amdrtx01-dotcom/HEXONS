@@ -71,6 +71,8 @@ function init() {
     state.leaderboards = persisted.leaderboards || [];
     if (persisted.wallet) state.wallet = Object.assign(state.wallet || { coins:0, lastDailyClaim:0 }, persisted.wallet);
     if (persisted.skins)  state.skins  = Object.assign(state.skins  || { equipped:"default", unlocked:["default"] }, persisted.skins);
+    if (Array.isArray(persisted.usedActivationCodes)) state.usedActivationCodes = persisted.usedActivationCodes;
+    if (persisted.activations) state.activations = Object.assign(state.activations || { redeemed:0, totalReceived:0, generated:0 }, persisted.activations);
   }
 
   /* Resurrect a permanent player ID from a dedicated key. This survives
@@ -196,6 +198,17 @@ async function handleLoginConfirm(){
   const safeName = (typeof safeProfileName === "function") ? safeProfileName(name) : name.toLowerCase();
   const pwHash   = await sha256Hex(pwd);
 
+  /* Admin gate. The literal nickname "admin" is reserved; logging in
+     with it requires the fixed admin password (`ADMIN_PASSWORD` in
+     profile.js). Players who try to register with that nick and the
+     wrong password are rejected before any profile is created. */
+  if (typeof ADMIN_NICKNAME === "string" && name.toLowerCase() === ADMIN_NICKNAME){
+    if (pwHash !== ADMIN_PASSWORD_HASH){
+      showLoginError(t("login.err.admin-pass") || "Невірний адмін-пароль");
+      return;
+    }
+  }
+
   /* Try loading a saved profile for this nickname first. On Android the
      disk bridge is consulted; in the browser this falls back to the
      per-nickname localStorage cache built by saveProfileToDisk. */
@@ -241,7 +254,7 @@ async function handleLoginConfirm(){
    replace `state` because other modules hold a direct reference to it. */
 function applyLoadedSnapshot(snap){
   if(!snap || typeof snap !== "object") return;
-  const k = ["profile","stats","settings","hidden","dailyTasks","leaderboards","wallet","skins","usedActivationCodes"];
+  const k = ["profile","stats","settings","hidden","dailyTasks","leaderboards","wallet","skins","usedActivationCodes","activations"];
   k.forEach(key => { if(snap[key] !== undefined) state[key] = snap[key]; });
   state.achievements = new Set(Array.isArray(snap.achievements) ? snap.achievements : []);
   state.run = null;
@@ -317,6 +330,12 @@ function enterApp() {
    settings, tasks, stats, profile, leaderboards, achievements)
    is its own full-viewport screen. */
 function go(screen) {
+  /* The Admin screen is locked to the admin user. If anyone else
+     navigates there (e.g. via stale URL state or a debug call) we
+     silently redirect them back to the menu. */
+  if (screen === "admin" && !(typeof isAdminUser === "function" && isAdminUser())){
+    screen = "menu";
+  }
   const target = document.querySelector('[data-screen="' + screen + '"]');
   if (!target) return;
   $$(".screen").forEach(s => s.classList.toggle("active", s.dataset.screen === screen));
@@ -329,6 +348,7 @@ function go(screen) {
   if (screen === "leaderboards") renderLeaderboards();
   if (screen === "achievements") renderAchievements();
   if (screen === "shop" && typeof renderShop === "function") renderShop();
+  if (screen === "admin" && typeof renderAdminScreen === "function") renderAdminScreen();
   if (typeof renderWallet === "function") renderWallet();
   if (screen === "game") updateHUD();
 }
@@ -352,6 +372,113 @@ function renderMenu() {
   /* Shop header coin amount mirrors the HUD pill. */
   const head = document.getElementById("shop-head-amount");
   if (head && typeof getCoins === "function") head.textContent = (typeof formatCoins === "function") ? formatCoins(getCoins()) : String(getCoins());
+  /* Admin menu tile is hidden for everyone except the admin user. */
+  const admTile = document.getElementById("menu-admin");
+  if (admTile){
+    const showAdm = (typeof isAdminUser === "function") && isAdminUser();
+    admTile.classList.toggle("hidden", !showAdm);
+  }
+}
+
+/* ---------- Admin screen ----------
+   Built dynamically each time the screen is entered so it always sees
+   the latest activation-code counters. The screen exposes three quick
+   actions (grant 100k HEX, unlock all skins, copy own ID) and a code
+   generator that binds an amount to a specific player ID. */
+function renderAdminScreen(){
+  /* Refresh the top stat row from state. */
+  const gen = document.getElementById("admin-stat-generated");
+  const act = document.getElementById("admin-stat-activated");
+  const hex = document.getElementById("admin-stat-hex");
+  if (gen) gen.textContent = String((typeof generatedCodesCount === "function") ? generatedCodesCount() : 0);
+  if (act) act.textContent = String((typeof redeemedCodesCount === "function") ? redeemedCodesCount() : 0);
+  if (hex) hex.textContent = String((typeof redeemedCodesTotal === "function") ? redeemedCodesTotal() : 0);
+
+  const panel = document.getElementById("admin-screen-panel");
+  if (!panel) return;
+  panel.innerHTML =
+    '<div class="admin-card">' +
+      '<div class="admin-card-head">'+
+        '<svg class="ic-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l7 4v6c0 5-3.5 8.5-7 10-3.5-1.5-7-5-7-10V6l7-4z"/><path d="M9 12l2 2 4-4"/></svg>'+
+        '<b data-i18n="admin.title">Admin Panel</b>'+
+        '<span class="admin-id" id="admin-id-chip">'+(state.profile.id||'')+'</span>'+
+      '</div>'+
+      '<div class="admin-actions">'+
+        '<button class="btn btn-primary" id="admin-grant-100k" data-i18n="admin.act.grant">+100 000 HEX</button>'+
+        '<button class="btn btn-primary" id="admin-unlock-all" data-i18n="admin.act.unlock">Unlock all skins</button>'+
+        '<button class="btn btn-ghost"   id="admin-copy-id"   data-i18n="admin.act.copy">Copy ID</button>'+
+      '</div>'+
+      '<div class="admin-gen">'+
+        '<div class="admin-gen-head"><b data-i18n="admin.gen.title">Activation code generator</b></div>'+
+        '<div class="admin-gen-row">'+
+          '<input type="text" id="admin-gen-id"     placeholder="HX-XXXXX-XXXXX" autocomplete="off" spellcheck="false">'+
+          '<input type="number" id="admin-gen-amt"  placeholder="HEX" min="1" max="10000000" value="10000">'+
+        '</div>'+
+        '<div class="admin-gen-row">'+
+          '<button class="btn btn-primary" id="admin-gen-btn"  data-i18n="admin.gen.btn">Generate</button>'+
+          '<button class="btn btn-ghost"   id="admin-gen-copy" data-i18n="admin.gen.copy" disabled>Copy</button>'+
+        '</div>'+
+        '<div class="admin-gen-out mono" id="admin-gen-out">—</div>'+
+      '</div>'+
+    '</div>';
+
+  if (typeof applyI18n === "function") applyI18n();
+
+  document.getElementById("admin-grant-100k").addEventListener("click", () => {
+    if (typeof addCoins === "function") addCoins(100000);
+    if (typeof renderWallet === "function") renderWallet();
+    toast("ADMIN: +100 000 HEX", "success");
+  });
+  document.getElementById("admin-unlock-all").addEventListener("click", () => {
+    if (typeof SHOP_SKIN_ORDER !== "undefined" && typeof unlockSkin === "function"){
+      SHOP_SKIN_ORDER.forEach(id => unlockSkin(id));
+      saveState();
+    }
+    toast(t("admin.toast.unlocked") || "ADMIN: all skins unlocked", "success");
+  });
+  document.getElementById("admin-copy-id").addEventListener("click", async () => {
+    try { await navigator.clipboard.writeText(state.profile.id || ""); toast(t("profile.copied") || "ID copied", "success"); }
+    catch { toast(state.profile.id || "", "info"); }
+  });
+
+  const genBtn  = document.getElementById("admin-gen-btn");
+  const genOut  = document.getElementById("admin-gen-out");
+  const genCopy = document.getElementById("admin-gen-copy");
+  genBtn.addEventListener("click", async () => {
+    const id  = (document.getElementById("admin-gen-id").value || "").trim();
+    const amt = parseInt(document.getElementById("admin-gen-amt").value, 10) || 0;
+    if (!id || amt <= 0){
+      genOut.textContent = "—";
+      genCopy.disabled = true;
+      toast(t("admin.gen.err.input") || "ID + amount required", "error");
+      return;
+    }
+    try {
+      const code = await makeActivationCode(id, amt);
+      genOut.textContent = code;
+      genCopy.disabled = false;
+      genCopy.dataset.code = code;
+      /* Increment the global generated counter. The same admin code
+         can be regenerated for the same target if the admin re-runs
+         this button — that's accepted, the counter then reflects total
+         generation events rather than unique nonces. */
+      if (!state.activations) state.activations = { redeemed:0, totalReceived:0, generated:0 };
+      state.activations.generated = (state.activations.generated | 0) + 1;
+      saveState();
+      const genEl = document.getElementById("admin-stat-generated");
+      if (genEl) genEl.textContent = String(state.activations.generated);
+      toast(t("admin.gen.ok") || "Code generated", "success");
+    } catch (e) {
+      genOut.textContent = "—";
+      toast("Failed: " + (e && e.message || e), "error");
+    }
+  });
+  genCopy.addEventListener("click", async () => {
+    const code = genCopy.dataset.code || genOut.textContent || "";
+    if (!code || code === "—") return;
+    try { await navigator.clipboard.writeText(code); toast(t("admin.gen.copied") || "Copied", "success"); }
+    catch { toast(code, "info"); }
+  });
 }
 
 /* ---------- App events ---------- */

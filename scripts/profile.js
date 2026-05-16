@@ -157,6 +157,21 @@ function loadProfileFromDisk(nickname){
   return null;
 }
 
+/* ---------- Admin credentials ----------
+   The admin role is gated by a fixed nickname + password pair so an
+   arbitrary user can't pick the "admin" handle on first registration.
+   The login flow in ui.js compares the incoming password's SHA-256
+   hash against ADMIN_PASSWORD_HASH; the plaintext only lives in
+   `ADMIN_PASSWORD` below for documentation. Both values are public —
+   this is *not* a security boundary, only a convenience gate so
+   normal players don't accidentally end up in the admin screen. */
+const ADMIN_NICKNAME = "admin";
+const ADMIN_PASSWORD = "hexon-admin-2025";
+/* SHA-256("hexon-admin-2025") — pre-computed so we don't pay the
+   crypto.subtle cost at boot, and so the plaintext can be rotated in
+   one place if it ever moves. */
+const ADMIN_PASSWORD_HASH = "05209a907afbebe33e669ffc7e6122a59e711f1d139ae195ab3ac881664974a8";
+
 /* ---------- Activation codes ----------
    Format on the wire (URL-safe, copy-pasteable):
 

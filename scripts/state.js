@@ -6,6 +6,11 @@ const state = {
   /* Activation-code nonces already redeemed on this device, so the
      same admin-generated code can't be used twice. */
   usedActivationCodes: [],
+  /* Aggregate counters for the activation-code system. `redeemed` and
+     `totalReceived` track codes this player has cashed in on this
+     device; `generated` tracks codes this admin has produced. They're
+     read by the Activate-code shop tab and by the Admin screen. */
+  activations: { redeemed: 0, totalReceived: 0, generated: 0 },
   stats: { games:0, best:0, bestRun:0, totalScore:0, totalTimeMs:0, lines:0, bestCombo:0, placedTotal:0, xp:0 },
   settings: {
     lang: "uk",

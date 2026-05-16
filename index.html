@@ -291,6 +291,10 @@
             <svg class="ic-svg lg"><use href="#i-shop"/></svg>
             <span data-i18n="tab.shop">Shop</span>
           </button>
+          <button class="menu-tile glass menu-tile-admin hidden" id="menu-admin" data-go="admin">
+            <svg class="ic-svg lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l7 4v6c0 5-3.5 8.5-7 10-3.5-1.5-7-5-7-10V6l7-4z"/><path d="M9 12l2 2 4-4"/></svg>
+            <span data-i18n="menu.admin">Admin</span>
+          </button>
           <button class="menu-tile glass menu-tile-exit" id="menu-exit">
             <svg class="ic-svg lg"><use href="#i-door"/></svg>
             <span data-i18n="menu.exit">Exit</span>
@@ -575,6 +579,10 @@
           <svg class="ic-svg"><use href="#i-coin"/></svg>
           <span data-i18n="shop.tab.coins">HEX coins</span>
         </button>
+        <button class="shop-tab" data-tab="redeem" role="tab">
+          <svg class="ic-svg"><use href="#i-gift"/></svg>
+          <span data-i18n="shop.tab.redeem">Activate code</span>
+        </button>
       </div>
 
       <div class="scroll-body shop-body">
@@ -586,7 +594,62 @@
           <div class="shop-pane-hint" data-i18n="shop.coins.hint">HEX coins unlock skins. Pay via Telegram, the admin will top you up.</div>
           <div class="shop-grid coin-grid" id="shop-coin-grid"></div>
         </div>
-        <div class="shop-admin-wrap hidden" id="shop-admin"></div>
+        <div class="shop-pane hidden" id="shop-pane-redeem">
+          <div class="shop-pane-hint" data-i18n="shop.redeem.hint">Paste an activation code received from the admin to credit HEX to your wallet.</div>
+          <div class="redeem-stats">
+            <div class="redeem-stat">
+              <div class="lbl" data-i18n="redeem.count.label">Codes activated</div>
+              <div class="val mono" id="redeem-count">0</div>
+            </div>
+            <div class="redeem-stat">
+              <div class="lbl" data-i18n="redeem.total.label">Total HEX received</div>
+              <div class="val mono" id="redeem-total">0</div>
+            </div>
+          </div>
+          <div class="redeem-card">
+            <div class="redeem-head">
+              <svg class="ic-svg lg"><use href="#i-gift"/></svg>
+              <b data-i18n="redeem.title">Activate code</b>
+            </div>
+            <p class="redeem-desc" data-i18n="redeem.desc">Paste a code from the admin to credit HEX to your account.</p>
+            <div class="redeem-row">
+              <input type="text" id="redeem-code-input" placeholder="HX1-XXXXXXXXXXXX-AMOUNT-NONCE-SIG" autocomplete="off" spellcheck="false">
+              <button class="btn btn-primary" id="redeem-code-btn" data-i18n="redeem.apply">Activate</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ ADMIN SCREEN ============ -->
+    <section class="screen admin-screen" data-screen="admin">
+      <header class="screen-head">
+        <button class="btn-back" data-go="menu">
+          <svg class="ic-svg lg"><use href="#i-arrow-left"/></svg>
+          <span data-i18n="nav.menu">Menu</span>
+        </button>
+        <h2 class="screen-title">
+          <svg class="ic-svg lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l7 4v6c0 5-3.5 8.5-7 10-3.5-1.5-7-5-7-10V6l7-4z"/><path d="M9 12l2 2 4-4"/></svg>
+          <span data-i18n="menu.admin">Admin</span>
+        </h2>
+        <span class="head-spacer"></span>
+      </header>
+      <div class="scroll-body admin-body">
+        <div class="admin-stats">
+          <div class="admin-stat">
+            <div class="lbl" data-i18n="admin.codes.generated">Codes generated</div>
+            <div class="val mono" id="admin-stat-generated">0</div>
+          </div>
+          <div class="admin-stat">
+            <div class="lbl" data-i18n="admin.codes.activated">Codes activated</div>
+            <div class="val mono" id="admin-stat-activated">0</div>
+          </div>
+          <div class="admin-stat">
+            <div class="lbl" data-i18n="admin.hex.granted">HEX activated</div>
+            <div class="val mono" id="admin-stat-hex">0</div>
+          </div>
+        </div>
+        <div id="admin-screen-panel"></div>
       </div>
     </section>
 

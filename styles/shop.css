@@ -321,3 +321,67 @@
   display: flex; gap: 10px; flex-wrap: wrap;
 }
 .redeem-row .btn-primary { flex: 0 0 auto; min-width: 120px; }
+
+/* ---------- Activate-code shop tab: counter row ---------- */
+.redeem-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 4px 0 14px;
+}
+.redeem-stat {
+  background: rgba(255,255,255,.04);
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 14px;
+  padding: 10px 12px;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.redeem-stat .lbl {
+  font-size: 11px;
+  letter-spacing: .04em;
+  color: var(--fg-mute);
+  text-transform: uppercase;
+}
+.redeem-stat .val {
+  font: 700 18px/1.1 ui-monospace, "JetBrains Mono", monospace;
+  color: #bdb3ff;
+}
+
+/* ---------- Admin screen ---------- */
+.admin-screen .admin-body {
+  padding: 14px 16px 24px;
+  display: flex; flex-direction: column; gap: 16px;
+}
+.admin-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+.admin-stat {
+  background: linear-gradient(180deg, rgba(255,180,84,.10), rgba(255,84,128,.06));
+  border: 1px solid rgba(255,180,84,.30);
+  border-radius: 14px;
+  padding: 10px 12px;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.admin-stat .lbl {
+  font-size: 11px;
+  letter-spacing: .04em;
+  color: rgba(255, 217, 176, 0.85);
+  text-transform: uppercase;
+}
+.admin-stat .val {
+  font: 700 20px/1.1 ui-monospace, "JetBrains Mono", monospace;
+  color: #ffd9b0;
+}
+@media (max-width: 480px) {
+  .admin-stats { grid-template-columns: 1fr; }
+}
+
+/* ---------- Admin menu tile (accent flavour) ---------- */
+.menu-tile-admin {
+  background: linear-gradient(180deg, rgba(255,180,84,.16), rgba(255,84,128,.08)) !important;
+  border-color: rgba(255,180,84,.40) !important;
+  color: #ffd9b0 !important;
+}
+.menu-tile-admin .ic-svg { color: #ffba6b; }
