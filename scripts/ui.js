@@ -198,13 +198,16 @@ async function handleLoginConfirm(){
   const safeName = (typeof safeProfileName === "function") ? safeProfileName(name) : name.toLowerCase();
   const pwHash   = await sha256Hex(pwd);
 
-  /* Admin gate. The literal nickname "admin" is reserved; logging in
-     with it requires the fixed admin password (`ADMIN_PASSWORD` in
-     profile.js). Players who try to register with that nick and the
-     wrong password are rejected before any profile is created. */
+  /* Admin gate. The literal nickname "admin" is reserved — nobody
+     except the actual admin can claim it. Any other login attempt with
+     this nick (case-insensitive) is rejected with a "reserved" message,
+     and no profile is created. Even the password input is treated as
+     blind — we never tell the user whether it was "close". The check
+     runs BEFORE we touch the disk so a stale on-disk profile cannot be
+     used to bypass it. */
   if (typeof ADMIN_NICKNAME === "string" && name.toLowerCase() === ADMIN_NICKNAME){
     if (pwHash !== ADMIN_PASSWORD_HASH){
-      showLoginError(t("login.err.admin-pass") || "Невірний адмін-пароль");
+      showLoginError(t("login.err.nick-reserved") || "Цей нікнейм зарезервовано");
       return;
     }
   }
@@ -385,34 +388,61 @@ function renderMenu() {
    the latest activation-code counters. The screen exposes three quick
    actions (grant 100k HEX, unlock all skins, copy own ID) and a code
    generator that binds an amount to a specific player ID. */
+/* Quick-pick amounts used by the admin generator. Surfaced as buttons
+   right above the amount input so the admin doesn't have to retype the
+   most common values. */
+const ADMIN_QUICK_AMOUNTS = [1000, 10000, 100000, 1000000];
+
 function renderAdminScreen(){
   /* Refresh the top stat row from state. */
   const gen = document.getElementById("admin-stat-generated");
   const act = document.getElementById("admin-stat-activated");
   const hex = document.getElementById("admin-stat-hex");
-  if (gen) gen.textContent = String((typeof generatedCodesCount === "function") ? generatedCodesCount() : 0);
-  if (act) act.textContent = String((typeof redeemedCodesCount === "function") ? redeemedCodesCount() : 0);
-  if (hex) hex.textContent = String((typeof redeemedCodesTotal === "function") ? redeemedCodesTotal() : 0);
+  const fmt = (typeof formatCoins === "function") ? formatCoins : String;
+  if (gen) gen.textContent = fmt((typeof generatedCodesCount === "function") ? generatedCodesCount() : 0);
+  if (act) act.textContent = fmt((typeof redeemedCodesCount === "function") ? redeemedCodesCount() : 0);
+  if (hex) hex.textContent = fmt((typeof redeemedCodesTotal === "function") ? redeemedCodesTotal() : 0);
 
   const panel = document.getElementById("admin-screen-panel");
   if (!panel) return;
+
+  /* Make sure the activations container has a history slot. Older saves
+     created before this version won't have one. */
+  if (!state.activations) state.activations = { redeemed:0, totalReceived:0, generated:0, history:[] };
+  if (!Array.isArray(state.activations.history)) state.activations.history = [];
+
+  const quickPicks = ADMIN_QUICK_AMOUNTS.map(n =>
+    '<button class="admin-quick" data-amt="' + n + '" type="button">' + fmt(n) + '</button>'
+  ).join("");
+
   panel.innerHTML =
     '<div class="admin-card">' +
       '<div class="admin-card-head">'+
         '<svg class="ic-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l7 4v6c0 5-3.5 8.5-7 10-3.5-1.5-7-5-7-10V6l7-4z"/><path d="M9 12l2 2 4-4"/></svg>'+
         '<b data-i18n="admin.title">Admin Panel</b>'+
-        '<span class="admin-id" id="admin-id-chip">'+(state.profile.id||'')+'</span>'+
+        '<span class="admin-id" id="admin-id-chip" title="' + (state.profile.id||'') + '">'+(state.profile.id||'')+'</span>'+
       '</div>'+
       '<div class="admin-actions">'+
         '<button class="btn btn-primary" id="admin-grant-100k" data-i18n="admin.act.grant">+100 000 HEX</button>'+
         '<button class="btn btn-primary" id="admin-unlock-all" data-i18n="admin.act.unlock">Unlock all skins</button>'+
         '<button class="btn btn-ghost"   id="admin-copy-id"   data-i18n="admin.act.copy">Copy ID</button>'+
+        '<button class="btn btn-ghost admin-reset" id="admin-reset-counters" data-i18n="admin.act.reset">Reset counters</button>'+
       '</div>'+
       '<div class="admin-gen">'+
         '<div class="admin-gen-head"><b data-i18n="admin.gen.title">Activation code generator</b></div>'+
-        '<div class="admin-gen-row">'+
-          '<input type="text" id="admin-gen-id"     placeholder="HX-XXXXX-XXXXX" autocomplete="off" spellcheck="false">'+
-          '<input type="number" id="admin-gen-amt"  placeholder="HEX" min="1" max="10000000" value="10000">'+
+        '<div class="admin-gen-field">'+
+          '<label data-i18n="admin.gen.target">Target HEXON ID</label>'+
+          '<div class="admin-gen-row">'+
+            '<input type="text" id="admin-gen-id"   placeholder="HX-XXXXX-XXXXX" autocomplete="off" spellcheck="false">'+
+            '<button class="btn btn-ghost" id="admin-gen-fillself" type="button" data-i18n="admin.gen.fillself">Use my ID</button>'+
+          '</div>'+
+        '</div>'+
+        '<div class="admin-gen-field">'+
+          '<label data-i18n="admin.gen.amount">Amount (HEX)</label>'+
+          '<div class="admin-gen-row">'+
+            '<input type="number" id="admin-gen-amt" placeholder="HEX" min="1" max="10000000" value="10000">'+
+          '</div>'+
+          '<div class="admin-quick-row">' + quickPicks + '</div>'+
         '</div>'+
         '<div class="admin-gen-row">'+
           '<button class="btn btn-primary" id="admin-gen-btn"  data-i18n="admin.gen.btn">Generate</button>'+
@@ -420,9 +450,17 @@ function renderAdminScreen(){
         '</div>'+
         '<div class="admin-gen-out mono" id="admin-gen-out">—</div>'+
       '</div>'+
+      '<div class="admin-history">'+
+        '<div class="admin-history-head">'+
+          '<b data-i18n="admin.history.title">Recent codes</b>'+
+          '<button class="admin-history-clear" id="admin-history-clear" type="button" data-i18n="admin.history.clear">Clear history</button>'+
+        '</div>'+
+        '<div class="admin-history-list" id="admin-history-list"></div>'+
+      '</div>'+
     '</div>';
 
   if (typeof applyI18n === "function") applyI18n();
+  renderAdminHistory();
 
   document.getElementById("admin-grant-100k").addEventListener("click", () => {
     if (typeof addCoins === "function") addCoins(100000);
@@ -440,13 +478,40 @@ function renderAdminScreen(){
     try { await navigator.clipboard.writeText(state.profile.id || ""); toast(t("profile.copied") || "ID copied", "success"); }
     catch { toast(state.profile.id || "", "info"); }
   });
+  document.getElementById("admin-reset-counters").addEventListener("click", () => {
+    /* Reset only the admin-facing counters; the player's redeem totals
+       stay untouched on purpose (that's a separate idea of "my codes"). */
+    state.activations = { redeemed:0, totalReceived:0, generated:0, history:[] };
+    saveState();
+    renderAdminScreen();
+    if (typeof renderShop === "function") renderShop();
+    toast(t("admin.act.reset.ok") || "Counters reset", "success");
+  });
 
+  const genIdInput = document.getElementById("admin-gen-id");
+  const genAmtInput = document.getElementById("admin-gen-amt");
   const genBtn  = document.getElementById("admin-gen-btn");
   const genOut  = document.getElementById("admin-gen-out");
   const genCopy = document.getElementById("admin-gen-copy");
+  const fillSelf = document.getElementById("admin-gen-fillself");
+
+  if (fillSelf) fillSelf.addEventListener("click", () => {
+    genIdInput.value = state.profile.id || "";
+    genIdInput.focus();
+  });
+
+  /* Quick-pick amount chips. */
+  panel.querySelectorAll(".admin-quick").forEach(b => {
+    b.addEventListener("click", () => {
+      const v = parseInt(b.dataset.amt || "0", 10) || 0;
+      if (v > 0){ genAmtInput.value = String(v); }
+      panel.querySelectorAll(".admin-quick").forEach(x => x.classList.toggle("on", x === b));
+    });
+  });
+
   genBtn.addEventListener("click", async () => {
-    const id  = (document.getElementById("admin-gen-id").value || "").trim();
-    const amt = parseInt(document.getElementById("admin-gen-amt").value, 10) || 0;
+    const id  = (genIdInput.value || "").trim();
+    const amt = parseInt(genAmtInput.value, 10) || 0;
     if (!id || amt <= 0){
       genOut.textContent = "—";
       genCopy.disabled = true;
@@ -462,12 +527,21 @@ function renderAdminScreen(){
          can be regenerated for the same target if the admin re-runs
          this button — that's accepted, the counter then reflects total
          generation events rather than unique nonces. */
-      if (!state.activations) state.activations = { redeemed:0, totalReceived:0, generated:0 };
+      if (!state.activations) state.activations = { redeemed:0, totalReceived:0, generated:0, history:[] };
       state.activations.generated = (state.activations.generated | 0) + 1;
+      if (!Array.isArray(state.activations.history)) state.activations.history = [];
+      /* Newest first, capped at 10 so the panel doesn't grow forever. */
+      state.activations.history.unshift({ code, id, amount: amt, at: Date.now() });
+      state.activations.history = state.activations.history.slice(0, 10);
       saveState();
       const genEl = document.getElementById("admin-stat-generated");
-      if (genEl) genEl.textContent = String(state.activations.generated);
-      toast(t("admin.gen.ok") || "Code generated", "success");
+      if (genEl) genEl.textContent = fmt(state.activations.generated);
+      /* Auto-copy on generation: most of the time the admin just wants
+         to paste it into Telegram. Best-effort; toast falls through if
+         the browser refuses clipboard access. */
+      try { await navigator.clipboard.writeText(code); } catch {}
+      toast(t("admin.gen.ok") || "Code generated and copied", "success");
+      renderAdminHistory();
     } catch (e) {
       genOut.textContent = "—";
       toast("Failed: " + (e && e.message || e), "error");
@@ -478,6 +552,51 @@ function renderAdminScreen(){
     if (!code || code === "—") return;
     try { await navigator.clipboard.writeText(code); toast(t("admin.gen.copied") || "Copied", "success"); }
     catch { toast(code, "info"); }
+  });
+
+  document.getElementById("admin-history-clear").addEventListener("click", () => {
+    if (!state.activations) return;
+    state.activations.history = [];
+    saveState();
+    renderAdminHistory();
+  });
+}
+
+/* Paint the "Recent codes" list under the generator. Each row shows the
+   target ID, amount, and a copy button; clicking the code text itself
+   also copies. The list is purely a convenience — the canonical code
+   value lives in the row's dataset and is never re-derived. */
+function renderAdminHistory(){
+  const list = document.getElementById("admin-history-list");
+  if (!list) return;
+  const fmt = (typeof formatCoins === "function") ? formatCoins : String;
+  const items = (state.activations && Array.isArray(state.activations.history))
+    ? state.activations.history : [];
+  if (items.length === 0){
+    list.innerHTML = '<div class="admin-history-empty" data-i18n="admin.history.empty">' +
+      (t("admin.history.empty") || "No codes generated yet") + '</div>';
+    return;
+  }
+  list.innerHTML = items.map((it, idx) => (
+    '<div class="admin-history-row" data-idx="' + idx + '">' +
+      '<div class="admin-history-meta">' +
+        '<b class="mono">' + (it.id || "?") + '</b>' +
+        '<span class="admin-history-amt">+' + fmt(it.amount || 0) + ' HEX</span>' +
+      '</div>' +
+      '<code class="admin-history-code mono">' + (it.code || "") + '</code>' +
+      '<button class="admin-history-copy" type="button" title="Copy">⧉</button>' +
+    '</div>'
+  )).join("");
+  list.querySelectorAll(".admin-history-row").forEach(row => {
+    const idx = parseInt(row.dataset.idx || "-1", 10);
+    const it  = items[idx];
+    if (!it) return;
+    const copy = async () => {
+      try { await navigator.clipboard.writeText(it.code || ""); toast(t("admin.gen.copied") || "Copied", "success"); }
+      catch { toast(it.code || "", "info"); }
+    };
+    row.querySelector(".admin-history-code").addEventListener("click", copy);
+    row.querySelector(".admin-history-copy").addEventListener("click", copy);
   });
 }
 

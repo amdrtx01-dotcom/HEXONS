@@ -385,3 +385,138 @@
   color: #ffd9b0 !important;
 }
 .menu-tile-admin .ic-svg { color: #ffba6b; }
+
+/* ---------- Admin screen v2: label-stacked generator + quick-picks ---------- */
+.admin-gen-field {
+  margin-top: 12px;
+}
+.admin-gen-field label {
+  display: block;
+  font-size: 11px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: rgba(255, 217, 176, 0.75);
+  margin-bottom: 6px;
+}
+.admin-quick-row {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  margin-top: 8px;
+}
+.admin-quick {
+  flex: 0 0 auto;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(255,180,84,.10);
+  border: 1px solid rgba(255,180,84,.30);
+  color: #ffd9b0;
+  font: 700 12px/1 ui-monospace, "JetBrains Mono", monospace;
+  cursor: pointer;
+  transition: background .15s ease, transform .1s ease, border-color .15s ease;
+}
+.admin-quick:hover { background: rgba(255,180,84,.18); }
+.admin-quick.on {
+  background: linear-gradient(180deg, #ff9a3a, #ff6088);
+  color: #2a1100;
+  border-color: rgba(255,180,84,.0);
+}
+
+.admin-reset {
+  color: #ffb6a8 !important;
+  border-color: rgba(255, 100, 84, .35) !important;
+}
+.admin-reset:hover { background: rgba(255, 100, 84, .10); }
+
+/* ---------- Admin recent-codes history ---------- */
+.admin-history {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px dashed rgba(255,180,84,.30);
+}
+.admin-history-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  margin-bottom: 8px;
+}
+.admin-history-head b {
+  color: #ffba6b;
+  font-size: 13px;
+  letter-spacing: .04em;
+}
+.admin-history-clear {
+  background: transparent;
+  border: 1px solid rgba(255, 100, 84, .35);
+  color: #ffb6a8;
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background .15s ease;
+}
+.admin-history-clear:hover { background: rgba(255, 100, 84, .10); }
+
+.admin-history-list {
+  display: flex; flex-direction: column; gap: 8px;
+}
+.admin-history-empty {
+  padding: 10px 12px;
+  border: 1px dashed rgba(255,255,255,.10);
+  border-radius: 10px;
+  color: var(--fg-mute);
+  font-size: 12px;
+  text-align: center;
+}
+.admin-history-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  gap: 4px 10px;
+  align-items: center;
+  padding: 8px 10px;
+  background: rgba(0,0,0,.30);
+  border: 1px solid rgba(255,180,84,.20);
+  border-radius: 10px;
+}
+.admin-history-meta {
+  grid-column: 1 / 2;
+  display: flex; align-items: baseline; gap: 8px;
+  min-width: 0;
+}
+.admin-history-meta b {
+  font-size: 12px;
+  color: #ffd9b0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.admin-history-amt {
+  font-size: 11px;
+  color: #b8ffd6;
+  white-space: nowrap;
+}
+.admin-history-code {
+  grid-column: 1 / 2;
+  font-size: 11px;
+  color: #d6c89c;
+  cursor: pointer;
+  word-break: break-all;
+  user-select: all;
+}
+.admin-history-code:hover { color: #ffd9b0; }
+.admin-history-copy {
+  grid-column: 2 / 3;
+  grid-row: 1 / 3;
+  align-self: center;
+  width: 32px; height: 32px;
+  border-radius: 8px;
+  background: rgba(255,180,84,.10);
+  border: 1px solid rgba(255,180,84,.30);
+  color: #ffd9b0;
+  cursor: pointer;
+  font-size: 14px;
+  display: grid; place-items: center;
+  transition: background .15s ease;
+}
+.admin-history-copy:hover { background: rgba(255,180,84,.20); }
+
+@media (max-width: 480px) {
+  .admin-actions .btn-primary,
+  .admin-actions .btn-ghost { min-width: 0; flex: 1 1 calc(50% - 5px); }
+  .admin-quick { padding: 6px 10px; font-size: 11px; }
+}
